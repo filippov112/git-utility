@@ -72,7 +72,7 @@ namespace GitUtility
             await command.ExecuteNonQueryAsync();
         }
 
-        public async Task<CommitNode> GetCommit(Guid id)
+        public async Task<CommitNode?> GetCommit(Guid id)
         {
             using var connection = new SQLiteConnection(_connectionString);
             await connection.OpenAsync();
@@ -90,7 +90,7 @@ namespace GitUtility
             return null;
         }
 
-        public async Task<CommitNode> GetCommitByNumber(int number)
+        public async Task<CommitNode?> GetCommitByNumber(int number)
         {
             using var connection = new SQLiteConnection(_connectionString);
             await connection.OpenAsync();
@@ -208,7 +208,7 @@ namespace GitUtility
         private CommitNode CreateCommitFromReader(DbDataReader reader)
         {
             var parentIdStr = reader["ParentId"] as string;
-        Guid? parentId = null;
+            Guid? parentId = null;
             if (!string.IsNullOrEmpty(parentIdStr))
             {
                 parentId = Guid.Parse(parentIdStr);
@@ -216,13 +216,13 @@ namespace GitUtility
 
             return new CommitNode
             {
-                Id = Guid.Parse(reader["Id"].ToString()),
+                Id = Guid.Parse(reader["Id"].ToString() ?? string.Empty),
                 Number = Convert.ToInt32(reader["Number"]),
-                Hash = reader["Hash"].ToString(),
-                Message = reader["Message"].ToString(),
-                Timestamp = DateTime.Parse(reader["Timestamp"].ToString()),
+                Hash = reader["Hash"].ToString() ?? string.Empty,
+                Message = reader["Message"].ToString() ?? string.Empty,
+                Timestamp = DateTime.Parse(reader["Timestamp"].ToString() ?? string.Empty),
                 ParentId = parentId,
-                BranchName = reader["BranchName"].ToString()
+                BranchName = reader["BranchName"].ToString() ?? string.Empty
             };
         }
     }

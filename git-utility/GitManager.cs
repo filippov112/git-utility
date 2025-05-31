@@ -1,14 +1,9 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using DotNetEnv;
+
 
 namespace GitUtility
 {
@@ -17,21 +12,47 @@ namespace GitUtility
         private readonly DatabaseManager _dbManager;
         private readonly string _githubToken;
         private readonly string _githubUsername;
+        private readonly string _gitignoreText;
+        private readonly string _readmeText;
         private readonly HttpClient _httpClient;
 
         public GitManager()
         {
-            // Загружаем конфигурацию из .env файла
-            Env.Load();
+            string envPath = Path.Combine(AppContext.BaseDirectory, ".env");
+            Env.Load(envPath);
             _githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN")
                 ?? throw new InvalidOperationException("GITHUB_TOKEN не найден в .env файле");
             _githubUsername = Environment.GetEnvironmentVariable("GITHUB_USERNAME")
                 ?? throw new InvalidOperationException("GITHUB_USERNAME не найден в .env файле");
+            string _gitignorePath = Environment.GetEnvironmentVariable("GITIGNORE_PATH")
+                ?? throw new InvalidOperationException("GITIGNORE_PATH не найден в .env файле");
+            string _readmePath = Environment.GetEnvironmentVariable("README_PATH")
+                ?? throw new InvalidOperationException("README_PATH не найден в .env файле");
+
+            _readmeText = ReadFile(_readmePath.Replace(@"\", "/"));
+            _gitignoreText = ReadFile(_gitignorePath.Replace(@"\", "/"));
 
             _dbManager = new DatabaseManager();
             _httpClient = new HttpClient();
             _httpClient.DefaultRequestHeaders.Add("Authorization", $"token {_githubToken}");
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "GitUtility");
+        }
+
+        private string ReadFile(string path)
+        {
+            string text = string.Empty;
+            try
+            {
+                using (StreamReader reader = new StreamReader(path))
+                {
+                    text = reader.ReadToEnd();
+                }
+            }
+            catch (IOException e)
+            {
+                Console.WriteLine("Error reading file: {0}", e.Message);
+            }
+            return text;
         }
 
         public async Task ExecuteCommand(string[] args)
@@ -85,6 +106,7 @@ namespace GitUtility
 
         private async Task InitCommand()
         {
+            GitRepositoryValidator.EnsureGitRepositoryDoesNotExist();
             var currentDir = Directory.GetCurrentDirectory();
             var repoName = ToKebabCase(Path.GetFileName(currentDir));
 
@@ -98,7 +120,7 @@ namespace GitUtility
             var readmePath = Path.Combine(currentDir, "README.md");
             if (!File.Exists(readmePath))
             {
-                await File.WriteAllTextAsync(readmePath, $"# {repoName}\n\nОписание проекта.\n");
+                await File.WriteAllTextAsync(readmePath, $"# {repoName}\n\n" + _readmeText);
                 Console.WriteLine("Создан README.md");
             }
 
@@ -106,8 +128,7 @@ namespace GitUtility
             var gitignorePath = Path.Combine(currentDir, ".gitignore");
             if (!File.Exists(gitignorePath))
             {
-                var gitignoreContent = GetDefaultGitignore();
-                await File.WriteAllTextAsync(gitignorePath, gitignoreContent);
+                await File.WriteAllTextAsync(gitignorePath, _gitignoreText);
                 Console.WriteLine("Создан .gitignore");
             }
 
@@ -130,6 +151,14 @@ namespace GitUtility
 
         private async Task StartCommand()
         {
+            GitRepositoryValidator.EnsureGitRepositoryExists();
+            // Проверяем наличие активной сессии
+            var activeCommitId = await _dbManager.GetActiveCommitId();
+            if (activeCommitId != null)
+            {
+                Console.WriteLine("Ошибка: Не закрыта текущая сессия! Выполните команду 'save' для её закрытия, прежде чем создавать новую.");
+                return;
+            }
             Console.WriteLine("Запуск новой сессии работы...");
 
             // Сброс всех незафиксированных изменений
@@ -167,6 +196,23 @@ namespace GitUtility
 
         private async Task FixCommand(string description = "")
         {
+            GitRepositoryValidator.EnsureGitRepositoryExists();
+            // Проверяем, есть ли активное дерево коммитов
+            var activeCommitId = await _dbManager.GetActiveCommitId();
+            if (activeCommitId == null)
+            {
+                Console.WriteLine("Нет активной сессии работы. Запускаем start...");
+                await StartCommand();
+
+                // После start проверяем еще раз
+                activeCommitId = await _dbManager.GetActiveCommitId();
+                if (activeCommitId == null)
+                {
+                    Console.WriteLine("Ошибка: Не удалось инициализировать сессию работы");
+                    return;
+                }
+            }
+
             // Проверяем наличие изменений
             var status = await RunGitCommand("status --porcelain");
             if (string.IsNullOrWhiteSpace(status))
@@ -182,7 +228,7 @@ namespace GitUtility
             await RunGitCommand($"commit -m \"{message}\"");
 
             var currentCommitHash = await GetCurrentCommitHash();
-            var activeCommitId = await _dbManager.GetActiveCommitId();
+            activeCommitId = await _dbManager.GetActiveCommitId();
             var nextNumber = await _dbManager.GetNextCommitNumber();
 
             // Проверяем, нужно ли создать новую ветку
@@ -191,7 +237,6 @@ namespace GitUtility
             // Если мы делаем fix после prev, создаем новую ветку
             if (activeCommitId.HasValue)
             {
-                var activeCommit = await _dbManager.GetCommit(activeCommitId.Value);
                 var childrenCount = await _dbManager.GetChildrenCount(activeCommitId.Value);
 
                 if (childrenCount > 0)
@@ -225,10 +270,11 @@ namespace GitUtility
 
         private async Task PrevCommand()
         {
+            GitRepositoryValidator.EnsureGitRepositoryExists();
             var activeCommitId = await _dbManager.GetActiveCommitId();
             if (activeCommitId == null)
             {
-                Console.WriteLine("Ошибка: Нет активного коммита");
+                Console.WriteLine("Ошибка: Нет активной сессии работы. Выполните команду 'start' сначала.");
                 return;
             }
 
@@ -240,14 +286,24 @@ namespace GitUtility
             }
 
             var parentCommit = await _dbManager.GetCommit(activeCommit.ParentId.Value);
-            await RunGitCommand($"reset --hard {parentCommit.Hash}");
-            await _dbManager.SetActiveCommit(parentCommit.Id);
 
-            Console.WriteLine($"Откат к коммиту #{parentCommit.Number}: {parentCommit.Message}");
+            await RunGitCommand($"reset --hard {parentCommit?.Hash}");
+            await _dbManager.SetActiveCommit(parentCommit?.Id ?? Guid.Empty);
+
+            Console.WriteLine($"Откат к коммиту #{parentCommit?.Number}: {parentCommit?.Message}");
         }
 
         private async Task ChCommand(int commitNumber)
         {
+            GitRepositoryValidator.EnsureGitRepositoryExists();
+            // Проверяем наличие активной сессии
+            var activeCommitId = await _dbManager.GetActiveCommitId();
+            if (activeCommitId == null)
+            {
+                Console.WriteLine("Нет активной сессии работы. Выполните команду 'start' для начала работы.");
+                return;
+            }
+
             // Сначала выполняем fix
             var status = await RunGitCommand("status --porcelain");
             if (!string.IsNullOrWhiteSpace(status))
@@ -270,6 +326,14 @@ namespace GitUtility
 
         private async Task ShowCommand(int? specificCommit = null)
         {
+            GitRepositoryValidator.EnsureGitRepositoryExists();
+            // Проверяем наличие активной сессии
+            var activeCommitId = await _dbManager.GetActiveCommitId();
+            if (activeCommitId == null)
+            {
+                Console.WriteLine("Нет активной сессии работы. Выполните команду 'start' для начала работы.");
+                return;
+            }
             if (specificCommit.HasValue)
             {
                 var commit = await _dbManager.GetCommitByNumber(specificCommit.Value);
@@ -285,7 +349,6 @@ namespace GitUtility
             }
 
             var commits = await _dbManager.GetAllCommits();
-            var activeCommitId = await _dbManager.GetActiveCommitId();
 
             if (!commits.Any())
             {
@@ -300,6 +363,14 @@ namespace GitUtility
 
         private async Task SaveCommand()
         {
+            GitRepositoryValidator.EnsureGitRepositoryExists();
+            // Проверяем наличие активной сессии
+            var activeCommitId = await _dbManager.GetActiveCommitId();
+            if (activeCommitId == null)
+            {
+                Console.WriteLine("Ошибка: Нет активной сессии работы. Выполните команду 'start' сначала.");
+                return;
+            }
             Console.WriteLine("Сохранение изменений...");
 
             // Выполняем fix только если есть изменения
@@ -432,17 +503,20 @@ namespace GitUtility
             };
 
             using var process = Process.Start(startInfo);
-            await process.WaitForExitAsync();
-
-            var output = await process.StandardOutput.ReadToEndAsync();
-            var error = await process.StandardError.ReadToEndAsync();
-
-            if (process.ExitCode != 0)
+            if (process != null)
             {
-                throw new Exception($"Git command failed: {error}");
-            }
+                await process.WaitForExitAsync();
 
-            return output.Trim();
+                var output = await process.StandardOutput.ReadToEndAsync();
+                var error = await process.StandardError.ReadToEndAsync();
+                if (process.ExitCode != 0)
+                {
+                    throw new Exception($"Git command failed: {error}");
+                }
+
+                return output.Trim();
+            }
+            return string.Empty;  
         }
 
         private async Task<string> GetCurrentCommitHash()
@@ -462,51 +536,6 @@ namespace GitUtility
                        .Trim('-');
         }
 
-        private string GetDefaultGitignore()
-        {
-            return @"# Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-[Aa][Rr][Mm]/
-[Aa][Rr][Mm]64/
-bld/
-[Bb]in/
-[Oo]bj/
-[Ll]og/
-
-# Visual Studio
-.vs/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-
-# User-specific files
-*.rsuser
-*.userprefs
-
-# Mono auto-generated files
-mono_crash.*
-
-# Build results
-*.dll
-*.exe
-*.pdb
-
-# NuGet
-*.nupkg
-*.snupkg
-packages/
-
-# Environment
-.env
-*.log
-";
-        }
 
         private void ShowHelp()
         {
