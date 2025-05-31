@@ -16,6 +16,9 @@ namespace GitUtility
         private readonly string _readmeText;
         private readonly HttpClient _httpClient;
 
+        private int _repositoryId;
+        private readonly string _repositoryPath;
+
         public GitManager()
         {
             string envPath = Path.Combine(AppContext.BaseDirectory, ".env");
@@ -36,6 +39,8 @@ namespace GitUtility
             _httpClient = new HttpClient();
             _httpClient.DefaultRequestHeaders.Add("Authorization", $"token {_githubToken}");
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "GitUtility");
+
+            _repositoryPath = Directory.GetCurrentDirectory();
         }
 
         private string ReadFile(string path)
@@ -66,6 +71,7 @@ namespace GitUtility
             var command = args[0].ToLower();
             var description = args.Length > 1 ? string.Join(" ", args.Skip(1)) : "";
 
+            _repositoryId = await _dbManager.GetRepositoryId(_repositoryPath);
             switch (command)
             {
                 case "init":
@@ -97,6 +103,9 @@ namespace GitUtility
                 case "save":
                     await SaveCommand();
                     break;
+                case "reset":
+                    await ResetCommand();
+                    break;
                 default:
                     Console.WriteLine($"Неизвестная команда: {command}");
                     ShowHelp();
@@ -104,11 +113,16 @@ namespace GitUtility
             }
         }
 
+        private async Task ResetCommand()
+        {
+            await _dbManager.ClearCommitTree(_repositoryId);
+            Console.WriteLine($"Сессия сброшена!");
+        }
+
         private async Task InitCommand()
         {
             GitRepositoryValidator.EnsureGitRepositoryDoesNotExist();
-            var currentDir = Directory.GetCurrentDirectory();
-            var repoName = ToKebabCase(Path.GetFileName(currentDir));
+            var repoName = ToKebabCase(Path.GetFileName(_repositoryPath));
 
             Console.WriteLine($"Инициализация репозитория '{repoName}'...");
 
@@ -117,7 +131,7 @@ namespace GitUtility
             await RunGitCommand("branch -M main");
 
             // Создание README.md если отсутствует
-            var readmePath = Path.Combine(currentDir, "README.md");
+            var readmePath = Path.Combine(_repositoryPath, "README.md");
             if (!File.Exists(readmePath))
             {
                 await File.WriteAllTextAsync(readmePath, $"# {repoName}\n\n" + _readmeText);
@@ -125,7 +139,7 @@ namespace GitUtility
             }
 
             // Создание .gitignore если отсутствует
-            var gitignorePath = Path.Combine(currentDir, ".gitignore");
+            var gitignorePath = Path.Combine(_repositoryPath, ".gitignore");
             if (!File.Exists(gitignorePath))
             {
                 await File.WriteAllTextAsync(gitignorePath, _gitignoreText);
@@ -153,7 +167,7 @@ namespace GitUtility
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
             // Проверяем наличие активной сессии
-            var activeCommitId = await _dbManager.GetActiveCommitId();
+            var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId != null)
             {
                 Console.WriteLine("Ошибка: Не закрыта текущая сессия! Выполните команду 'save' для её закрытия, прежде чем создавать новую.");
@@ -187,9 +201,9 @@ namespace GitUtility
                 BranchName = branchName
             };
 
-            await _dbManager.ClearCommitTree();
+            await _dbManager.ClearCommitTree(_repositoryId);
             await _dbManager.SaveCommit(rootCommit);
-            await _dbManager.SetActiveCommit(rootCommit.Id);
+            await _dbManager.SetActiveCommit(_repositoryId, rootCommit.Id);
 
             Console.WriteLine($"Создана рабочая ветка '{branchName}' и начальный коммит");
         }
@@ -198,14 +212,14 @@ namespace GitUtility
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
             // Проверяем, есть ли активное дерево коммитов
-            var activeCommitId = await _dbManager.GetActiveCommitId();
+            var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
                 Console.WriteLine("Нет активной сессии работы. Запускаем start...");
                 await StartCommand();
 
                 // После start проверяем еще раз
-                activeCommitId = await _dbManager.GetActiveCommitId();
+                activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
                 if (activeCommitId == null)
                 {
                     Console.WriteLine("Ошибка: Не удалось инициализировать сессию работы");
@@ -228,8 +242,8 @@ namespace GitUtility
             await RunGitCommand($"commit -m \"{message}\"");
 
             var currentCommitHash = await GetCurrentCommitHash();
-            activeCommitId = await _dbManager.GetActiveCommitId();
-            var nextNumber = await _dbManager.GetNextCommitNumber();
+            activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
+            var nextNumber = await _dbManager.GetNextCommitNumber(_repositoryId);
 
             // Проверяем, нужно ли создать новую ветку
             string branchName = await GetCurrentBranch();
@@ -263,7 +277,7 @@ namespace GitUtility
             };
 
             await _dbManager.SaveCommit(newCommit);
-            await _dbManager.SetActiveCommit(newCommit.Id);
+            await _dbManager.SetActiveCommit(_repositoryId, newCommit.Id);
 
             Console.WriteLine($"Коммит #{nextNumber} создан: {message}");
         }
@@ -271,7 +285,7 @@ namespace GitUtility
         private async Task PrevCommand()
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
-            var activeCommitId = await _dbManager.GetActiveCommitId();
+            var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
                 Console.WriteLine("Ошибка: Нет активной сессии работы. Выполните команду 'start' сначала.");
@@ -288,7 +302,7 @@ namespace GitUtility
             var parentCommit = await _dbManager.GetCommit(activeCommit.ParentId.Value);
 
             await RunGitCommand($"reset --hard {parentCommit?.Hash}");
-            await _dbManager.SetActiveCommit(parentCommit?.Id ?? Guid.Empty);
+            await _dbManager.SetActiveCommit(_repositoryId, parentCommit?.Id ?? Guid.Empty);
 
             Console.WriteLine($"Откат к коммиту #{parentCommit?.Number}: {parentCommit?.Message}");
         }
@@ -297,7 +311,7 @@ namespace GitUtility
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
             // Проверяем наличие активной сессии
-            var activeCommitId = await _dbManager.GetActiveCommitId();
+            var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
                 Console.WriteLine("Нет активной сессии работы. Выполните команду 'start' для начала работы.");
@@ -311,7 +325,7 @@ namespace GitUtility
                 await FixCommand();
             }
 
-            var targetCommit = await _dbManager.GetCommitByNumber(commitNumber);
+            var targetCommit = await _dbManager.GetCommitByNumber(_repositoryId, commitNumber);
             if (targetCommit == null)
             {
                 Console.WriteLine($"Ошибка: Коммит #{commitNumber} не найден");
@@ -319,7 +333,7 @@ namespace GitUtility
             }
 
             await RunGitCommand($"reset --hard {targetCommit.Hash}");
-            await _dbManager.SetActiveCommit(targetCommit.Id);
+            await _dbManager.SetActiveCommit(_repositoryId, targetCommit.Id);
 
             Console.WriteLine($"Переход к коммиту #{targetCommit.Number}: {targetCommit.Message}");
         }
@@ -328,7 +342,7 @@ namespace GitUtility
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
             // Проверяем наличие активной сессии
-            var activeCommitId = await _dbManager.GetActiveCommitId();
+            var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
                 Console.WriteLine("Нет активной сессии работы. Выполните команду 'start' для начала работы.");
@@ -336,7 +350,7 @@ namespace GitUtility
             }
             if (specificCommit.HasValue)
             {
-                var commit = await _dbManager.GetCommitByNumber(specificCommit.Value);
+                var commit = await _dbManager.GetCommitByNumber(_repositoryId, specificCommit.Value);
                 if (commit == null)
                 {
                     Console.WriteLine($"Коммит #{specificCommit} не найден");
@@ -348,7 +362,7 @@ namespace GitUtility
                 return;
             }
 
-            var commits = await _dbManager.GetAllCommits();
+            var commits = await _dbManager.GetAllCommits(_repositoryId);
 
             if (!commits.Any())
             {
@@ -365,7 +379,7 @@ namespace GitUtility
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
             // Проверяем наличие активной сессии
-            var activeCommitId = await _dbManager.GetActiveCommitId();
+            var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
                 Console.WriteLine("Ошибка: Нет активной сессии работы. Выполните команду 'start' сначала.");
@@ -394,7 +408,7 @@ namespace GitUtility
             await RunGitCommand($"branch -D {currentBranch}");
 
             // Очистка дерева коммитов
-            await _dbManager.ClearCommitTree();
+            await _dbManager.ClearCommitTree(_repositoryId);
 
             Console.WriteLine("Изменения сохранены, Pull Request создан, дерево очищено");
         }
@@ -549,6 +563,7 @@ namespace GitUtility
             Console.WriteLine("  ch <номер>           - Переход к коммиту по номеру");
             Console.WriteLine("  show [номер]         - Показать дерево коммитов или детали коммита");
             Console.WriteLine("  save                 - Сохранение и отправка изменений");
+            Console.WriteLine("  reset                - Сброс сессии (на случай ошибок)");
         }
     }
 }
