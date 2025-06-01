@@ -258,10 +258,6 @@ namespace GitUtility
                     // Создаем новую ветку для ответвления
                     branchName = $"branch-{DateTime.Now:HHmmss}-{nextNumber}";
                     await RunGitCommand($"checkout -b {branchName}");
-
-                    // // Перемещаем коммит в новую ветку
-                    // await RunGitCommand($"cherry-pick {currentCommitHash}");
-                    // currentCommitHash = await GetCurrentCommitHash();
                 }
             }
 
