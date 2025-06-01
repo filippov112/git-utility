@@ -25,13 +25,13 @@ namespace GitUtility
             string envPath = Path.Combine(AppContext.BaseDirectory, ".env");
             Env.Load(envPath);
             _githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN")
-                ?? throw new InvalidOperationException("GITHUB_TOKEN не найден в .env файле");
+                ?? throw new InvalidOperationException("GITHUB_TOKEN РЅРµ РЅР°Р№РґРµРЅ РІ .env С„Р°Р№Р»Рµ");
             _githubUsername = Environment.GetEnvironmentVariable("GITHUB_USERNAME")
-                ?? throw new InvalidOperationException("GITHUB_USERNAME не найден в .env файле");
+                ?? throw new InvalidOperationException("GITHUB_USERNAME РЅРµ РЅР°Р№РґРµРЅ РІ .env С„Р°Р№Р»Рµ");
             string _gitignorePath = Environment.GetEnvironmentVariable("GITIGNORE_PATH")
-                ?? throw new InvalidOperationException("GITIGNORE_PATH не найден в .env файле");
+                ?? throw new InvalidOperationException("GITIGNORE_PATH РЅРµ РЅР°Р№РґРµРЅ РІ .env С„Р°Р№Р»Рµ");
             string _readmePath = Environment.GetEnvironmentVariable("README_PATH")
-                ?? throw new InvalidOperationException("README_PATH не найден в .env файле");
+                ?? throw new InvalidOperationException("README_PATH РЅРµ РЅР°Р№РґРµРЅ РІ .env С„Р°Р№Р»Рµ");
 
             _readmeText = ReadFile(_readmePath.Replace(@"\", "/"));
             _gitignoreText = ReadFile(_gitignorePath.Replace(@"\", "/"));
@@ -91,7 +91,7 @@ namespace GitUtility
                 case "ch":
                     if (args.Length < 2 || !int.TryParse(args[1], out int commitNumber))
                     {
-                        Console.WriteLine("Ошибка: Укажите номер коммита для команды ch");
+                        Console.WriteLine("РћС€РёР±РєР°: РЈРєР°Р¶РёС‚Рµ РЅРѕРјРµСЂ РєРѕРјРјРёС‚Р° РґР»СЏ РєРѕРјР°РЅРґС‹ ch");
                         return;
                     }
                     await ChCommand(commitNumber);
@@ -109,7 +109,7 @@ namespace GitUtility
                     await ResetCommand();
                     break;
                 default:
-                    Console.WriteLine($"Неизвестная команда: {command}");
+                    Console.WriteLine($"РќРµРёР·РІРµСЃС‚РЅР°СЏ РєРѕРјР°РЅРґР°: {command}");
                     ShowHelp();
                     break;
             }
@@ -118,7 +118,7 @@ namespace GitUtility
         private async Task ResetCommand()
         {
             await _dbManager.ClearCommitTree(_repositoryId);
-            Console.WriteLine($"Сессия сброшена!");
+            Console.WriteLine($"РЎРµСЃСЃРёСЏ СЃР±СЂРѕС€РµРЅР°!");
         }
 
         private async Task InitCommand()
@@ -126,69 +126,69 @@ namespace GitUtility
             GitRepositoryValidator.EnsureGitRepositoryDoesNotExist();
             var repoName = ToKebabCase(Path.GetFileName(_repositoryPath));
 
-            Console.WriteLine($"Инициализация репозитория '{repoName}'...");
+            Console.WriteLine($"РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ '{repoName}'...");
 
-            // Инициализация локального Git репозитория
+            // РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ Р»РѕРєР°Р»СЊРЅРѕРіРѕ Git СЂРµРїРѕР·РёС‚РѕСЂРёСЏ
             await RunGitCommand("init");
             await RunGitCommand("branch -M main");
 
-            // Создание README.md если отсутствует
+            // РЎРѕР·РґР°РЅРёРµ README.md РµСЃР»Рё РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚
             var readmePath = Path.Combine(_repositoryPath, "README.md");
             if (!File.Exists(readmePath))
             {
                 await File.WriteAllTextAsync(readmePath, $"# {repoName}\n\n" + _readmeText);
-                Console.WriteLine("Создан README.md");
+                Console.WriteLine("РЎРѕР·РґР°РЅ README.md");
             }
 
-            // Создание .gitignore если отсутствует
+            // РЎРѕР·РґР°РЅРёРµ .gitignore РµСЃР»Рё РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚
             var gitignorePath = Path.Combine(_repositoryPath, ".gitignore");
             if (!File.Exists(gitignorePath))
             {
                 await File.WriteAllTextAsync(gitignorePath, _gitignoreText);
-                Console.WriteLine("Создан .gitignore");
+                Console.WriteLine("РЎРѕР·РґР°РЅ .gitignore");
             }
 
-            // Добавление и коммит файлов
+            // Р”РѕР±Р°РІР»РµРЅРёРµ Рё РєРѕРјРјРёС‚ С„Р°Р№Р»РѕРІ
             await RunGitCommand("add .");
             await RunGitCommand("commit -m \"Initial commit\"");
 
-            // Создание удаленного репозитория на GitHub
+            // РЎРѕР·РґР°РЅРёРµ СѓРґР°Р»РµРЅРЅРѕРіРѕ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ РЅР° GitHub
             await CreateGitHubRepository(repoName);
 
-            // Связывание с удаленным репозиторием
+            // РЎРІСЏР·С‹РІР°РЅРёРµ СЃ СѓРґР°Р»РµРЅРЅС‹Рј СЂРµРїРѕР·РёС‚РѕСЂРёРµРј
             var remoteUrl = $"https://github.com/{_githubUsername}/{repoName}.git";
             await RunGitCommand($"remote add origin {remoteUrl}");
 
-            // Push в удаленный репозиторий
+            // Push РІ СѓРґР°Р»РµРЅРЅС‹Р№ СЂРµРїРѕР·РёС‚РѕСЂРёР№
             await RunGitCommand("push -u origin main");
 
-            Console.WriteLine($"Репозиторий '{repoName}' успешно создан и загружен на GitHub!");
+            Console.WriteLine($"Р РµРїРѕР·РёС‚РѕСЂРёР№ '{repoName}' СѓСЃРїРµС€РЅРѕ СЃРѕР·РґР°РЅ Рё Р·Р°РіСЂСѓР¶РµРЅ РЅР° GitHub!");
         }
 
         private async Task StartCommand()
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
-            // Проверяем наличие активной сессии
+            // РџСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РёРµ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё
             var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId != null)
             {
-                Console.WriteLine("Ошибка: Не закрыта текущая сессия! Выполните команду 'save' для её закрытия, прежде чем создавать новую.");
+                Console.WriteLine("РћС€РёР±РєР°: РќРµ Р·Р°РєСЂС‹С‚Р° С‚РµРєСѓС‰Р°СЏ СЃРµСЃСЃРёСЏ! Р’С‹РїРѕР»РЅРёС‚Рµ РєРѕРјР°РЅРґСѓ 'save' РґР»СЏ РµС‘ Р·Р°РєСЂС‹С‚РёСЏ, РїСЂРµР¶РґРµ С‡РµРј СЃРѕР·РґР°РІР°С‚СЊ РЅРѕРІСѓСЋ.");
                 return;
             }
-            Console.WriteLine("Запуск новой сессии работы...");
+            Console.WriteLine("Р—Р°РїСѓСЃРє РЅРѕРІРѕР№ СЃРµСЃСЃРёРё СЂР°Р±РѕС‚С‹...");
 
-            // Сброс всех незафиксированных изменений
+            // РЎР±СЂРѕСЃ РІСЃРµС… РЅРµР·Р°С„РёРєСЃРёСЂРѕРІР°РЅРЅС‹С… РёР·РјРµРЅРµРЅРёР№
             await RunGitCommand("reset --hard");
             await RunGitCommand("clean -fd");
 
-            // Pull последних изменений
+            // Pull РїРѕСЃР»РµРґРЅРёС… РёР·РјРµРЅРµРЅРёР№
             await RunGitCommand("pull");
 
-            // Создание новой ветки для работы
+            // РЎРѕР·РґР°РЅРёРµ РЅРѕРІРѕР№ РІРµС‚РєРё РґР»СЏ СЂР°Р±РѕС‚С‹
             var branchName = $"work-{DateTime.Now:yyyyMMdd-HHmmss}";
             await RunGitCommand($"checkout -b {branchName}");
 
-            // Создание начального коммита в дереве
+            // РЎРѕР·РґР°РЅРёРµ РЅР°С‡Р°Р»СЊРЅРѕРіРѕ РєРѕРјРјРёС‚Р° РІ РґРµСЂРµРІРµ
             var currentCommitHash = await GetCurrentCommitHash();
 
             var rootCommit = new CommitNode
@@ -205,39 +205,39 @@ namespace GitUtility
             await _dbManager.SaveCommit(rootCommit);
             await _dbManager.SetActiveCommit(_repositoryId, rootCommit.Id);
 
-            Console.WriteLine($"Создана рабочая ветка '{branchName}' и начальный коммит");
+            Console.WriteLine($"РЎРѕР·РґР°РЅР° СЂР°Р±РѕС‡Р°СЏ РІРµС‚РєР° '{branchName}'");
         }
 
         private async Task FixCommand(string description = "")
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
-            // Проверяем, есть ли активное дерево коммитов
+            // РџСЂРѕРІРµСЂСЏРµРј, РµСЃС‚СЊ Р»Рё Р°РєС‚РёРІРЅРѕРµ РґРµСЂРµРІРѕ РєРѕРјРјРёС‚РѕРІ
             var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
-                Console.WriteLine("Нет активной сессии работы. Запускаем start...");
+                Console.WriteLine("РќРµС‚ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё СЂР°Р±РѕС‚С‹. Р—Р°РїСѓСЃРєР°РµРј start...");
                 await StartCommand();
 
-                // После start проверяем еще раз
+                // РџРѕСЃР»Рµ start РїСЂРѕРІРµСЂСЏРµРј РµС‰Рµ СЂР°Р·
                 activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
                 if (activeCommitId == null)
                 {
-                    Console.WriteLine("Ошибка: Не удалось инициализировать сессию работы");
+                    Console.WriteLine("РћС€РёР±РєР°: РќРµ СѓРґР°Р»РѕСЃСЊ РёРЅРёС†РёР°Р»РёР·РёСЂРѕРІР°С‚СЊ СЃРµСЃСЃРёСЋ СЂР°Р±РѕС‚С‹");
                     return;
                 }
             }
 
-            // Проверяем наличие изменений
+            // РџСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РёРµ РёР·РјРµРЅРµРЅРёР№
             var status = await RunGitCommand("status --porcelain");
             if (string.IsNullOrWhiteSpace(status))
             {
-                Console.WriteLine("Нет изменений для фиксации");
+                Console.WriteLine("РќРµС‚ РёР·РјРµРЅРµРЅРёР№ РґР»СЏ С„РёРєСЃР°С†РёРё");
                 return;
             }
 
             var message = string.IsNullOrWhiteSpace(description) ? "fix" : description;
 
-            // Добавляем и коммитим изменения
+            // Р”РѕР±Р°РІР»СЏРµРј Рё РєРѕРјРјРёС‚РёРј РёР·РјРµРЅРµРЅРёСЏ
             await RunGitCommand("add .");
             await RunGitCommand($"commit -m \"{message}\"");
 
@@ -245,19 +245,20 @@ namespace GitUtility
             activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             var nextNumber = await _dbManager.GetNextCommitNumber(_repositoryId);
 
-            // Проверяем, нужно ли создать новую ветку
+            // РџСЂРѕРІРµСЂСЏРµРј, РЅСѓР¶РЅРѕ Р»Рё СЃРѕР·РґР°С‚СЊ РЅРѕРІСѓСЋ РІРµС‚РєСѓ
             string branchName = await GetCurrentBranch();
 
-            // Если мы делаем fix после prev, создаем новую ветку
+            // Р•СЃР»Рё РјС‹ РґРµР»Р°РµРј fix РїРѕСЃР»Рµ prev, СЃРѕР·РґР°РµРј РЅРѕРІСѓСЋ РІРµС‚РєСѓ
             if (activeCommitId.HasValue)
             {
                 var childrenCount = await _dbManager.GetChildrenCount(activeCommitId.Value);
 
                 if (childrenCount > 0)
                 {
-                    // Создаем новую ветку для ответвления
+                    // РЎРѕР·РґР°РµРј РЅРѕРІСѓСЋ РІРµС‚РєСѓ РґР»СЏ РѕС‚РІРµС‚РІР»РµРЅРёСЏ
                     branchName = $"branch-{DateTime.Now:HHmmss}-{nextNumber}";
                     await RunGitCommand($"checkout -b {branchName}");
+                    Console.WriteLine($"РЎРѕР·РґР°РЅР° РІРµС‚РєР° {branchName}. Р’С‹РїРѕР»РЅРµРЅРѕ РїРµСЂРµРєР»СЋС‡РµРЅРёРµ!");
                 }
             }
 
@@ -276,7 +277,7 @@ namespace GitUtility
             await _dbManager.SaveCommit(newCommit);
             await _dbManager.SetActiveCommit(_repositoryId, newCommit.Id);
 
-            Console.WriteLine($"Коммит #{nextNumber} создан: {message}");
+            Console.WriteLine($"РљРѕРјРјРёС‚ #{nextNumber} СЃРѕР·РґР°РЅ: {message}");
         }
 
         private async Task PrevCommand()
@@ -285,14 +286,14 @@ namespace GitUtility
             var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
-                Console.WriteLine("Ошибка: Нет активной сессии работы. Выполните команду 'start' сначала.");
+                Console.WriteLine("РћС€РёР±РєР°: РќРµС‚ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё СЂР°Р±РѕС‚С‹. Р’С‹РїРѕР»РЅРёС‚Рµ РєРѕРјР°РЅРґСѓ 'start' СЃРЅР°С‡Р°Р»Р°.");
                 return;
             }
 
             var activeCommit = await _dbManager.GetCommit(activeCommitId.Value);
             if (activeCommit?.ParentId == null)
             {
-                Console.WriteLine("Ошибка: Это первый коммит после start");
+                Console.WriteLine("РћС€РёР±РєР°: Р­С‚Рѕ РїРµСЂРІС‹Р№ РєРѕРјРјРёС‚ РїРѕСЃР»Рµ start");
                 return;
             }
 
@@ -301,21 +302,21 @@ namespace GitUtility
             await RunGitCommand($"reset --hard {parentCommit?.Hash}");
             await _dbManager.SetActiveCommit(_repositoryId, parentCommit?.Id ?? Guid.Empty);
 
-            Console.WriteLine($"Откат к коммиту #{parentCommit?.Number}: {parentCommit?.Message}");
+            Console.WriteLine($"РћС‚РєР°С‚ Рє РєРѕРјРјРёС‚Сѓ #{parentCommit?.Number}: {parentCommit?.Message}");
         }
 
         private async Task ChCommand(int commitNumber)
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
-            // Проверяем наличие активной сессии
+            // РџСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РёРµ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё
             var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
-                Console.WriteLine("Нет активной сессии работы. Выполните команду 'start' для начала работы.");
+                Console.WriteLine("РќРµС‚ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё СЂР°Р±РѕС‚С‹. Р’С‹РїРѕР»РЅРёС‚Рµ РєРѕРјР°РЅРґСѓ 'start' РґР»СЏ РЅР°С‡Р°Р»Р° СЂР°Р±РѕС‚С‹.");
                 return;
             }
 
-            // Сначала выполняем fix
+            // РЎРЅР°С‡Р°Р»Р° РІС‹РїРѕР»РЅСЏРµРј fix
             var status = await RunGitCommand("status --porcelain");
             if (!string.IsNullOrWhiteSpace(status))
             {
@@ -325,24 +326,24 @@ namespace GitUtility
             var targetCommit = await _dbManager.GetCommitByNumber(_repositoryId, commitNumber);
             if (targetCommit == null)
             {
-                Console.WriteLine($"Ошибка: Коммит #{commitNumber} не найден");
+                Console.WriteLine($"РћС€РёР±РєР°: РљРѕРјРјРёС‚ #{commitNumber} РЅРµ РЅР°Р№РґРµРЅ");
                 return;
             }
 
             await RunGitCommand($"reset --hard {targetCommit.Hash}");
             await _dbManager.SetActiveCommit(_repositoryId, targetCommit.Id);
 
-            Console.WriteLine($"Переход к коммиту #{targetCommit.Number}: {targetCommit.Message}");
+            Console.WriteLine($"РџРµСЂРµС…РѕРґ Рє РєРѕРјРјРёС‚Сѓ #{targetCommit.Number}: {targetCommit.Message}");
         }
 
         private async Task ShowCommand(int? specificCommit = null)
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
-            // Проверяем наличие активной сессии
+            // РџСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РёРµ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё
             var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
-                Console.WriteLine("Нет активной сессии работы. Выполните команду 'start' для начала работы.");
+                Console.WriteLine("РќРµС‚ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё СЂР°Р±РѕС‚С‹. Р’С‹РїРѕР»РЅРёС‚Рµ РєРѕРјР°РЅРґСѓ 'start' РґР»СЏ РЅР°С‡Р°Р»Р° СЂР°Р±РѕС‚С‹.");
                 return;
             }
             if (specificCommit.HasValue)
@@ -350,12 +351,12 @@ namespace GitUtility
                 var commit = await _dbManager.GetCommitByNumber(_repositoryId, specificCommit.Value);
                 if (commit == null)
                 {
-                    Console.WriteLine($"Коммит #{specificCommit} не найден");
+                    Console.WriteLine($"РљРѕРјРјРёС‚ #{specificCommit} РЅРµ РЅР°Р№РґРµРЅ");
                     return;
                 }
-                Console.WriteLine($"Коммит #{commit.Number}:");
-                Console.WriteLine($"  Время: {commit.Timestamp:yyyy-MM-dd HH:mm:ss}");
-                Console.WriteLine($"  Сообщение: {commit.Message}");
+                Console.WriteLine($"РљРѕРјРјРёС‚ #{commit.Number}:");
+                Console.WriteLine($"  Р’СЂРµРјСЏ: {commit.Timestamp:yyyy-MM-dd HH:mm:ss}");
+                Console.WriteLine($"  РЎРѕРѕР±С‰РµРЅРёРµ: {commit.Message}");
                 return;
             }
 
@@ -363,11 +364,11 @@ namespace GitUtility
 
             if (!commits.Any())
             {
-                Console.WriteLine("Нет коммитов в дереве");
+                Console.WriteLine("РќРµС‚ РєРѕРјРјРёС‚РѕРІ РІ РґРµСЂРµРІРµ");
                 return;
             }
 
-            // Построение дерева коммитов
+            // РџРѕСЃС‚СЂРѕРµРЅРёРµ РґРµСЂРµРІР° РєРѕРјРјРёС‚РѕРІ
             var tree = BuildCommitTree(commits, activeCommitId);
             Console.WriteLine(tree);
         }
@@ -375,39 +376,51 @@ namespace GitUtility
         private async Task SaveCommand()
         {
             GitRepositoryValidator.EnsureGitRepositoryExists();
-            // Проверяем наличие активной сессии
+            // РџСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РёРµ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё
             var activeCommitId = await _dbManager.GetActiveCommitId(_repositoryId);
             if (activeCommitId == null)
             {
-                Console.WriteLine("Ошибка: Нет активной сессии работы. Выполните команду 'start' сначала.");
+                Console.WriteLine("РћС€РёР±РєР°: РќРµС‚ Р°РєС‚РёРІРЅРѕР№ СЃРµСЃСЃРёРё СЂР°Р±РѕС‚С‹. Р’С‹РїРѕР»РЅРёС‚Рµ РєРѕРјР°РЅРґСѓ 'start' СЃРЅР°С‡Р°Р»Р°.");
                 return;
             }
-            Console.WriteLine("Сохранение изменений...");
+            Console.WriteLine("РЎРѕС…СЂР°РЅРµРЅРёРµ РёР·РјРµРЅРµРЅРёР№...");
 
-            // Выполняем fix только если есть изменения
+            // Р’С‹РїРѕР»РЅСЏРµРј fix С‚РѕР»СЊРєРѕ РµСЃР»Рё РµСЃС‚СЊ РёР·РјРµРЅРµРЅРёСЏ
             var status = await RunGitCommand("status --porcelain");
             if (!string.IsNullOrWhiteSpace(status))
             {
                 await FixCommand();
             }
 
-            // Push изменений
             var currentBranch = await GetCurrentBranch();
-            await RunGitCommand($"push -u origin {currentBranch}");
 
-            // Создание Pull Request
-            await CreatePullRequest(currentBranch);
+            int nextNumber = await _dbManager.GetNextCommitNumber(_repositoryId);
+            if (nextNumber > 2)
+            {
+                // Push РёР·РјРµРЅРµРЅРёР№
+                await RunGitCommand($"push -u origin {currentBranch}");
+                Console.WriteLine("РР·РјРµРЅРµРЅРёСЏ СЃРѕС…СЂР°РЅРµРЅС‹...");
 
-            // Возврат на основную ветку
+                // РЎРѕР·РґР°РЅРёРµ Pull Request
+                await CreatePullRequest(currentBranch);
+                Console.WriteLine("Pull Request СЃРѕР·РґР°РЅ... (РќРµ Р·Р°Р±СѓРґСЊС‚Рµ РµРіРѕ РїСЂРёРЅСЏС‚СЊ)");
+            }
+            else
+            {
+                Console.WriteLine("РР·РјРµРЅРµРЅРёР№ РІ СЃРµСЃСЃРёРё РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅРѕ...");
+            }
+            
+            // Р’РѕР·РІСЂР°С‚ РЅР° РѕСЃРЅРѕРІРЅСѓСЋ РІРµС‚РєСѓ
             await RunGitCommand("checkout main");
+            Console.WriteLine("РџРµСЂРµРєР»СЋС‡РµРЅРёРµ РЅР° РІРµС‚РєСѓ main...");
 
-            // Удаление локальной рабочей ветки
+            // РЈРґР°Р»РµРЅРёРµ Р»РѕРєР°Р»СЊРЅРѕР№ СЂР°Р±РѕС‡РµР№ РІРµС‚РєРё
             await RunGitCommand($"branch -D {currentBranch}");
+            Console.WriteLine($"Р’РµС‚РєР° {currentBranch} СѓРґР°Р»РµРЅР°...");
 
-            // Очистка дерева коммитов
+            // РћС‡РёСЃС‚РєР° РґРµСЂРµРІР° РєРѕРјРјРёС‚РѕРІ
             await _dbManager.ClearCommitTree(_repositoryId);
-
-            Console.WriteLine("Изменения сохранены, Pull Request создан, дерево очищено");
+            Console.WriteLine("Р”РµСЂРµРІРѕ РѕС‡РёС‰РµРЅРѕ, СЃРµСЃСЃРёСЏ Р·Р°РєСЂС‹С‚Р°!");
         }
 
         private string BuildCommitTree(List<CommitNode> commits, Guid? activeCommitId)
@@ -468,10 +481,10 @@ namespace GitUtility
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync();
-                throw new Exception($"Не удалось создать репозиторий на GitHub: {error}");
+                throw new Exception($"РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ СЂРµРїРѕР·РёС‚РѕСЂРёР№ РЅР° GitHub: {error}");
             }
 
-            Console.WriteLine($"Удаленный репозиторий '{repoName}' создан на GitHub");
+            Console.WriteLine($"РЈРґР°Р»РµРЅРЅС‹Р№ СЂРµРїРѕР·РёС‚РѕСЂРёР№ '{repoName}' СЃРѕР·РґР°РЅ РЅР° GitHub");
         }
 
         private async Task CreatePullRequest(string branchName)
@@ -494,12 +507,12 @@ namespace GitUtility
 
             if (response.IsSuccessStatusCode)
             {
-                Console.WriteLine("Pull Request создан успешно");
+                Console.WriteLine("Pull Request СЃРѕР·РґР°РЅ СѓСЃРїРµС€РЅРѕ");
             }
             else
             {
                 var error = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"Предупреждение: Не удалось создать Pull Request: {error}");
+                Console.WriteLine($"РџСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ: РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Pull Request: {error}");
             }
         }
 
@@ -552,17 +565,17 @@ namespace GitUtility
 
         private void ShowHelp()
         {
-            Console.WriteLine("Git Utility - Утилита для работы с Git");
+            Console.WriteLine("Git Utility - РЈС‚РёР»РёС‚Р° РґР»СЏ СЂР°Р±РѕС‚С‹ СЃ Git");
             Console.WriteLine();
-            Console.WriteLine("Команды:");
-            Console.WriteLine("  init                 - Инициализация нового репозитория");
-            Console.WriteLine("  start                - Начало новой сессии работы");
-            Console.WriteLine("  fix [описание]       - Фиксация изменений в коммит");
-            Console.WriteLine("  prev                 - Откат к предыдущему коммиту");
-            Console.WriteLine("  ch <номер>           - Переход к коммиту по номеру");
-            Console.WriteLine("  show [номер]         - Показать дерево коммитов или детали коммита");
-            Console.WriteLine("  save                 - Сохранение и отправка изменений");
-            Console.WriteLine("  reset                - Сброс сессии (на случай ошибок)");
+            Console.WriteLine("РљРѕРјР°РЅРґС‹:");
+            Console.WriteLine("  init                 - РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ РЅРѕРІРѕРіРѕ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ");
+            Console.WriteLine("  start                - РќР°С‡Р°Р»Рѕ РЅРѕРІРѕР№ СЃРµСЃСЃРёРё СЂР°Р±РѕС‚С‹");
+            Console.WriteLine("  fix [РѕРїРёСЃР°РЅРёРµ]       - Р¤РёРєСЃР°С†РёСЏ РёР·РјРµРЅРµРЅРёР№ РІ РєРѕРјРјРёС‚");
+            Console.WriteLine("  prev                 - РћС‚РєР°С‚ Рє РїСЂРµРґС‹РґСѓС‰РµРјСѓ РєРѕРјРјРёС‚Сѓ");
+            Console.WriteLine("  ch <РЅРѕРјРµСЂ>           - РџРµСЂРµС…РѕРґ Рє РєРѕРјРјРёС‚Сѓ РїРѕ РЅРѕРјРµСЂСѓ");
+            Console.WriteLine("  show [РЅРѕРјРµСЂ]         - РџРѕРєР°Р·Р°С‚СЊ РґРµСЂРµРІРѕ РєРѕРјРјРёС‚РѕРІ РёР»Рё РґРµС‚Р°Р»Рё РєРѕРјРјРёС‚Р°");
+            Console.WriteLine("  save                 - РЎРѕС…СЂР°РЅРµРЅРёРµ Рё РѕС‚РїСЂР°РІРєР° РёР·РјРµРЅРµРЅРёР№");
+            Console.WriteLine("  reset                - РЎР±СЂРѕСЃ СЃРµСЃСЃРёРё (РЅР° СЃР»СѓС‡Р°Р№ РѕС€РёР±РѕРє)");
         }
     }
 }
