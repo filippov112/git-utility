@@ -249,7 +249,7 @@ namespace GitUtility
             using var connection = new SQLiteConnection(_connectionString);
             await connection.OpenAsync();
 
-            var sql = "SELECT RepositoryId FROM Repositories WHERE Path = @directoryPath";
+            var sql = "SELECT Id FROM Repositories WHERE Path = @directoryPath";
             using var command1 = new SQLiteCommand(sql, connection);
             command1.Parameters.AddWithValue("@directoryPath", directoryPath);
 
