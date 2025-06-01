@@ -259,9 +259,9 @@ namespace GitUtility
                     branchName = $"branch-{DateTime.Now:HHmmss}-{nextNumber}";
                     await RunGitCommand($"checkout -b {branchName}");
 
-                    // Перемещаем коммит в новую ветку
-                    await RunGitCommand($"cherry-pick {currentCommitHash}");
-                    currentCommitHash = await GetCurrentCommitHash();
+                    // // Перемещаем коммит в новую ветку
+                    // await RunGitCommand($"cherry-pick {currentCommitHash}");
+                    // currentCommitHash = await GetCurrentCommitHash();
                 }
             }
 
